@@ -27,7 +27,8 @@ LINE_CHANNEL_SECRET = "23969ac940dc1ae6b5b5211b7c84807a"
 LINE_CHANNEL_ACCESS_TOKEN = "irnHkqFbWyJW5SAVKPbqv9bITkPaZIXWNKlXfg7RKUYwLVNufpWJg7VtdzGEdMFYH25xngW9Nwx2Py/Kp1SVnH3iBkCiZUYgQDJUEBvarWzb/u3CbV1eB7/RGPbi+D9cwRt3pQECw5genf6N4UOn6wdB04t89/1O/w1cDnyilFU="
 
 # 🌐 BASE URL ของเว็บเรา (ใช้สร้างลิงก์ให้ user คลิกจาก LINE)
-WEB_BASE_URL = "https://865c540fec17.ngrok-free.app"  # <--- แก้ตรงนี้เวลาเปลี่ยน ngrok
+# WEB_BASE_URL = "https://865c540fec17.ngrok-free.app"  # <--- แก้ตรงนี้เวลาเปลี่ยน ngrok
+WEB_BASE_URL = "https://ht-2025.onrender.com"
 
 print(f"SECRET length: {len(LINE_CHANNEL_SECRET)}")
 print(f"TOKEN length: {len(LINE_CHANNEL_ACCESS_TOKEN)}")
