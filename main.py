@@ -1907,9 +1907,9 @@ async def post_history(data: HistoryIn):
     msg_lines = [
         f"หน่วย: {unit_name}",
         f"🌡อุณหภูมิ: {data.temp:.1f} °C",
-        f"  รู้สึกเหมือน: {data.hic:.1f} °C",
         f"💧ความชื้น: {data.humid:.1f} %RH",
         f"-สัญญาณธงสี: {flag_th.get(data.flag, data.flag)}",
+        f"-รู้สึกเหมือน: {data.hic:.1f} °C",
         f"-ฝึก/พัก: {flag_map.get(data.flag, {{}}).get('rest', '-')}",
         f"-ดื่มน้ำ: {flag_map.get(data.flag, {{}}).get('water', '-')}",
     ]
