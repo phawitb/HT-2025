@@ -13,7 +13,26 @@ import requests
 import json
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+TH_TZ = timezone(timedelta(hours=7))
+
+def format_ts_th(s: str) -> str:
+    """
+    รับ string timestamp จาก GAS เช่น 2025-11-17T22:24:02.000Z
+    คืน string แบบ 11/18/25-05:24 เวลาประเทศไทย
+    """
+    dt = _parse_dt(s)
+    if dt == datetime.min:
+        return s  # ถ้า parse ไม่ได้ก็ส่งคืนเหมือนเดิม
+
+    # ถ้าไม่มี timezone ให้ถือว่าเป็น UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    dt_th = dt.astimezone(TH_TZ)
+    return dt_th.strftime("%m/%d/%y-%H:%M")
+
 
 # =========================================================
 # FastAPI app
@@ -27,7 +46,7 @@ LINE_CHANNEL_SECRET = "23969ac940dc1ae6b5b5211b7c84807a"
 LINE_CHANNEL_ACCESS_TOKEN = "irnHkqFbWyJW5SAVKPbqv9bITkPaZIXWNKlXfg7RKUYwLVNufpWJg7VtdzGEdMFYH25xngW9Nwx2Py/Kp1SVnH3iBkCiZUYgQDJUEBvarWzb/u3CbV1eB7/RGPbi+D9cwRt3pQECw5genf6N4UOn6wdB04t89/1O/w1cDnyilFU="
 
 # 🌐 BASE URL ของเว็บเรา (ใช้สร้างลิงก์ให้ user คลิกจาก LINE)
-# WEB_BASE_URL = "https://865c540fec17.ngrok-free.app"  # <--- แก้ตรงนี้เวลาเปลี่ยน ngrok
+# WEB_BASE_URL = "https://9c48c1744596.ngrok-free.app"  # <--- แก้ตรงนี้เวลาเปลี่ยน ngrok
 WEB_BASE_URL = "https://ht-2025.onrender.com"
 
 print(f"SECRET length: {len(LINE_CHANNEL_SECRET)}")
@@ -41,8 +60,8 @@ logger = logging.getLogger("uvicorn.error")
 # =========================================================
 # 🧩 Google Apps Script API (Config + History + Subs)
 # =========================================================
-# BASE_URL = "https://script.google.com/macros/s/AKfycbxOv9jHbbry-aT4FmTP2pm6ejOLnLBMVnrn9uHC4O3wN2tpOgZjdbnq-EPZGKTZHsn3/exec"
 BASE_URL = "https://script.google.com/macros/s/AKfycbzlvan12-CNKU97jHaKGMdD0vVJoBD13T4GGq6cFhlshAug7oEw3KjG3WSmh3F4-iN4/exec"
+
 
 # ---------- small helper ----------
 def _safe_float(v, default: float = 0.0) -> float:
@@ -351,8 +370,7 @@ async def callback(request: Request):
             lower = user_text.lower()
             reply_message = None
 
-            # ใช้คำสั่ง /register /history /status ให้โชว์เมนูเดียวกัน
-            # if lower.startswith("/register") or lower.startswith("/history") or lower.startswith("/status"):
+            # ใช้คำสั่ง /ht ให้โชว์เมนูเดียวกัน
             if lower.startswith("/ht"):
                 register_url = f"{WEB_BASE_URL}/register?line_id={line_chat_id}"
                 history_url = f"{WEB_BASE_URL}/history?line_id={line_chat_id}"
@@ -553,6 +571,7 @@ def register_form(
                     background: #f9fafb;
                     color: #111827;
                     font-size: 0.95rem;
+                    box-sizing: border-box;
                 }}
                 input[type="text"]:focus {{
                     outline: none;
@@ -590,17 +609,86 @@ def register_form(
                     font-size: 0.75rem;
                     margin-bottom: 4px;
                 }}
+
+                .loading-backdrop {{
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.45);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                    backdrop-filter: blur(3px);
+                    transition: opacity 0.15s ease-out;
+                    opacity: 1;
+                }}
+                .loading-backdrop.hidden {{
+                    opacity: 0;
+                    pointer-events: none;
+                }}
+                .loading-box {{
+                    background: rgba(15, 23, 42, 0.9);
+                    padding: 16px 18px;
+                    border-radius: 16px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 10px;
+                    min-width: 160px;
+                }}
+                .loading-spinner {{
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 999px;
+                    border: 3px solid rgba(148, 163, 184, 0.5);
+                    border-top-color: #38bdf8;
+                    animation: spin 0.7s linear infinite;
+                }}
+                .loading-text {{
+                    font-size: 0.9rem;
+                    color: #e5e7eb;
+                }}
+                @keyframes spin {{
+                    to {{ transform: rotate(360deg); }}
+                }}
             </style>
+            <script>
+            function showGlobalLoading(label) {{
+                var overlay = document.getElementById('global-loading');
+                if (!overlay) return;
+                var textEl = overlay.querySelector('.loading-text');
+                if (textEl) {{
+                    textEl.textContent = label || 'กำลังโหลด...';
+                }}
+                overlay.classList.remove('hidden');
+            }}
+
+            function hideGlobalLoading() {{
+                var overlay = document.getElementById('global-loading');
+                if (!overlay) return;
+                overlay.classList.add('hidden');
+            }}
+
+            window.addEventListener('pageshow', function() {{
+                hideGlobalLoading();
+            }});
+            </script>
         </head>
         <body>
+            <div id="global-loading" class="loading-backdrop hidden">
+                <div class="loading-box">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">กำลังโหลด...</div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="pill">Step 1 / 2</div>
                 <h1>Device ID (serial เครื่องวัด):</h1>
-             
 
-                <form method="get" action="/register">
+                <form method="get" action="/register"
+                      onsubmit="showGlobalLoading('กำลังตรวจสอบ Device ID...');">
                     <label>
-          
                         <input type="text" name="device_id" required placeholder="เช่น HTxxx" />
                     </label>
                     <input type="hidden" name="line_id" value="{line_id}" />
@@ -625,7 +713,6 @@ def register_form(
 
     if valid_ids and device_id not in valid_ids:
         # device_id ไม่อยู่ใน listDevices → ขึ้น error card
-        all_ids_html = ", ".join(valid_ids) if valid_ids else "-"
         html = f"""
         <!DOCTYPE html>
         <html lang="th">
@@ -672,26 +759,12 @@ def register_form(
                     font-size: 0.78rem;
                     margin-bottom: 6px;
                 }}
-                a {{
-                    display: inline-block;
-                    margin-top: 12px;
-                    font-size: 0.9rem;
-                    color: #0369a1;
-                    text-decoration: none;
-                }}
-                .small {{
-                    font-size: 0.8rem;
-                    color: #6b7280;
-                    margin-top: 6px;
-                }}
             </style>
         </head>
         <body>
             <div class="card">
                 <div class="badge">Device Not Found</div>
-          
                 <h1>"{device_id}" ไม่อยู่ในรายการอุปกรณ์ที่ระบบรู้จัก</h1>
-                
             </div>
         </body>
         </html>
@@ -785,7 +858,7 @@ def register_form(
                 font-size: 0.9rem;
             }}
             input[type="text"],
-            input[type="number"] {{
+            select {{
                 width: 100%;
                 padding: 10px 12px;
                 margin-top: 6px;
@@ -794,9 +867,10 @@ def register_form(
                 background: #f9fafb;
                 color: #111827;
                 font-size: 0.95rem;
+                box-sizing: border-box;
             }}
             input[type="text"]:focus,
-            input[type="number"]:focus {{
+            select:focus {{
                 outline: none;
                 border-color: #38bdf8;
                 box-shadow: 0 0 0 1px #38bdf8;
@@ -829,23 +903,121 @@ def register_form(
                 font-size: 0.82rem;
                 color: #6b7280;
             }}
+
+            .loading-backdrop {{
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.45);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+                backdrop-filter: blur(3px);
+                transition: opacity 0.15s ease-out;
+                opacity: 1;
+            }}
+            .loading-backdrop.hidden {{
+                opacity: 0;
+                pointer-events: none;
+            }}
+            .loading-box {{
+                background: rgba(15, 23, 42, 0.9);
+                padding: 16px 18px;
+                border-radius: 16px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                min-width: 160px;
+            }}
+            .loading-spinner {{
+                width: 32px;
+                height: 32px;
+                border-radius: 999px;
+                border: 3px solid rgba(148, 163, 184, 0.5);
+                border-top-color: #38bdf8;
+                animation: spin 0.7s linear infinite;
+            }}
+            .loading-text {{
+                font-size: 0.9rem;
+                color: #e5e7eb;
+            }}
+            @keyframes spin {{
+                to {{ transform: rotate(360deg); }}
+            }}
         </style>
         <script>
+        function showGlobalLoading(label) {{
+            var overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+            var textEl = overlay.querySelector('.loading-text');
+            if (textEl) {{
+                textEl.textContent = label || 'กำลังโหลด...';
+            }}
+            overlay.classList.remove('hidden');
+        }}
+
+        function hideGlobalLoading() {{
+            var overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+            overlay.classList.add('hidden');
+        }}
+
+        window.addEventListener('pageshow', function() {{
+            hideGlobalLoading();
+        }});
+
         function onSubmitForm(form) {{
+            showGlobalLoading('กำลังบันทึกการตั้งค่า...');
+
             var btn = form.querySelector('button[type="submit"]');
             if (btn) {{
                 btn.disabled = true;
-                btn.innerText = 'กำลังบันทึก...';  // Waiting state
+                btn.innerText = 'กำลังบันทึก...';
             }}
-            var inputs = form.querySelectorAll('input');
+
+            var inputs = form.querySelectorAll('input, select');
             inputs.forEach(function(el) {{
-                el.readOnly = true;
+                // el.readOnly = true;
             }});
+
             return true;
         }}
+
+        function populateAdjSelect(selectId, defaultValue) {{
+            var select = document.getElementById(selectId);
+            if (!select) return;
+
+            var min = -5.0;
+            var max = 5.0;
+            var step = 0.1;
+            var def = parseFloat(defaultValue);
+
+            for (var value = min; value <= max + 1e-9; value += step) {{
+                var option = document.createElement('option');
+                option.value = value.toFixed(1);
+                option.textContent = value.toFixed(1);
+                if (Math.abs(value - def) < 1e-9) {{
+                    option.selected = true;
+                }}
+                select.appendChild(option);
+            }}
+        }}
+
+        document.addEventListener('DOMContentLoaded', function() {{
+            populateAdjSelect('adj_temp', {adj_temp_value});
+            populateAdjSelect('adj_humid', {adj_humid_value});
+        }});
         </script>
     </head>
     <body>
+        <div id="global-loading" class="loading-backdrop hidden">
+            <div class="loading-box">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">กำลังโหลด...</div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="pill">Step 2 / 2</div>
             <h1>ตั้งค่าอุปกรณ์</h1>
@@ -857,21 +1029,21 @@ def register_form(
                 <input type="hidden" name="line_chat_id" value="{line_id}" />
 
                 <label>
-                    Unit name (เช่น หน่วยฝึก พัน.ร.):
-                    <input type="text" name="unit_name" value="{unit_value}" required placeholder="เช่น ห้องนอน, โต๊ะทำงาน" />
+                    หน่วย:
+                    <input type="text" name="unit_name" value="{unit_value}" required placeholder="เช่น หน่วยฝึกxxx" />
                 </label>
 
                 <div class="input-row">
                     <div>
                         <label>
-                            Adj Temp (ชดเชยอุณหภูมิ, °C):
-                            <input type="number" step="0.1" name="adj_temp" value="{adj_temp_value}" required />
+                            ชดเชยอุณหภูมิ(°C):
+                            <select name="adj_temp" id="adj_temp" required></select>
                         </label>
                     </div>
                     <div>
                         <label>
-                            Adj Humid (ชดเชยความชื้น, %RH):
-                            <input type="number" step="0.1" name="adj_humid" value="{adj_humid_value}" required />
+                            ชดเชยความชื้น(%RH):
+                            <select name="adj_humid" id="adj_humid" required></select>
                         </label>
                     </div>
                 </div>
@@ -879,7 +1051,7 @@ def register_form(
                 <button type="submit">อัปเดตการตั้งค่า</button>
 
                 <p class="note">
-                    * ค่าชดเชย เช่น ถ้าเซนเซอร์อ่านอุณหภูมิต่ำกว่าจริง 0.1°C ให้ใส่ <b>+0.1</b> เป็นต้น (ใส่ได้ทั้งบวกและลบเฉพาะทศนิยม 1 ตำแหน่ง)
+                    ** ค่าชดเชย เช่น ถ้าเซนเซอร์อ่านอุณหภูมิต่ำกว่าจริง 0.1°C ให้ใส่ <b>+0.1</b> เป็นต้น 
                 </p>
             </form>
         </div>
@@ -936,6 +1108,10 @@ def register_submit(
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>บันทึกสำเร็จ</title>
         <style>
+        * {{
+            box-sizing: border-box;
+        }}
+
             body {{
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 background: #f3f4f6;
@@ -993,9 +1169,79 @@ def register_submit(
                 font-size: 0.78rem;
                 margin-bottom: 6px;
             }}
+
+            .loading-backdrop {{
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.45);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+                backdrop-filter: blur(3px);
+                transition: opacity 0.15s ease-out;
+                opacity: 1;
+            }}
+            .loading-backdrop.hidden {{
+                opacity: 0;
+                pointer-events: none;
+            }}
+            .loading-box {{
+                background: rgba(15, 23, 42, 0.9);
+                padding: 16px 18px;
+                border-radius: 16px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                min-width: 160px;
+            }}
+            .loading-spinner {{
+                width: 32px;
+                height: 32px;
+                border-radius: 999px;
+                border: 3px solid rgba(148, 163, 184, 0.5);
+                border-top-color: #38bdf8;
+                animation: spin 0.7s linear infinite;
+            }}
+            .loading-text {{
+                font-size: 0.9rem;
+                color: #e5e7eb;
+            }}
+            @keyframes spin {{
+                to {{ transform: rotate(360deg); }}
+            }}
         </style>
+        <script>
+        function showGlobalLoading(label) {{
+            var overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+            var textEl = overlay.querySelector('.loading-text');
+            if (textEl) {{
+                textEl.textContent = label || 'กำลังโหลด...';
+            }}
+            overlay.classList.remove('hidden');
+        }}
+
+        function hideGlobalLoading() {{
+            var overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+            overlay.classList.add('hidden');
+        }}
+
+        window.addEventListener('pageshow', function() {{
+            hideGlobalLoading();
+        }});
+        </script>
     </head>
     <body>
+        <div id="global-loading" class="loading-backdrop hidden">
+            <div class="loading-box">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">กำลังโหลด...</div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="badge">Saved</div>
             <h1>บันทึกการตั้งค่าเรียบร้อย</h1>
@@ -1007,7 +1253,10 @@ def register_submit(
 
             {status_html}
 
-            <a href="/register?line_id={line_chat_id}&device_id={device_id}">⬅ กลับไปหน้าแก้ไขอุปกรณ์นี้</a>
+            <a href="/register?line_id={line_chat_id}&device_id={device_id}"
+               onclick="showGlobalLoading('กำลังเปิดหน้าแก้ไข...');">
+                ⬅ กลับไปหน้าแก้ไขอุปกรณ์นี้
+            </a>
         </div>
     </body>
     </html>
@@ -1171,7 +1420,7 @@ def history_page(
 
     device_ids_only = [str(d.get("id")) for d in devices_info if d.get("id")]
 
-    # เลือก device ปัจจุบัน: ถ้ามีพารามิเตอร์และอยู่ใน list ใช้เลย, ไม่งั้นใช้ตัวแรก (current_status sort มาแล้ว)
+    # เลือก device ปัจจุบัน
     if device_id and device_id in device_ids_only:
         selected_device = device_id
     else:
@@ -1203,7 +1452,11 @@ def history_page(
 
     # เตรียม data สำหรับ Chart.js (ให้กราฟเป็นเก่า→ใหม่ภายในหน้า)
     chart_rows = list(reversed(page_rows))
-    labels = [str(r.get("timestamp", "")) for r in chart_rows]
+    labels = [
+        format_ts_th(r.get("timestamp", "")) if r.get("timestamp") else ""
+        for r in chart_rows
+    ]
+
     temps = [_safe_float(r.get("temp")) for r in chart_rows]
     humids = [_safe_float(r.get("humid")) for r in chart_rows]
     hics = [_safe_float(r.get("hic")) for r in chart_rows]
@@ -1243,7 +1496,8 @@ def history_page(
     # table rows (page_rows เป็นใหม่สุด→เก่าสุด)
     table_rows_html = ""
     for r in page_rows:
-        ts = r.get("timestamp", "")
+        ts_raw = r.get("timestamp", "")
+        ts = format_ts_th(ts_raw) if ts_raw else ""
         temp = _safe_float(r.get("temp"))
         humid = _safe_float(r.get("humid"))
         hic = _safe_float(r.get("hic"))
@@ -1258,10 +1512,11 @@ def history_page(
         </tr>
         """
 
-    # หา status ของ device ที่เลือก เพื่อโชว์ในหัว
+    # หา status ของ device ที่เลือก
     selected_info = next((d for d in devices_info if str(d.get("id")) == selected_device), None)
     sel_status = selected_info.get("status") if selected_info else "-"
-    sel_lastupdate = selected_info.get("lastupdate") if selected_info else "-"
+    raw_lastupdate = selected_info.get("lastupdate") if selected_info else "-"
+    sel_lastupdate = format_ts_th(raw_lastupdate) if raw_lastupdate not in (None, "-", "") else "-"
 
     html = f"""
     <!DOCTYPE html>
@@ -1354,18 +1609,87 @@ def history_page(
             .pagination span {{
                 color: #4b5563;
             }}
+
+            .loading-backdrop {{
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.45);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+                backdrop-filter: blur(3px);
+                transition: opacity 0.15s ease-out;
+                opacity: 1;
+            }}
+            .loading-backdrop.hidden {{
+                opacity: 0;
+                pointer-events: none;
+            }}
+            .loading-box {{
+                background: rgba(15, 23, 42, 0.9);
+                padding: 16px 18px;
+                border-radius: 16px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                min-width: 160px;
+            }}
+            .loading-spinner {{
+                width: 32px;
+                height: 32px;
+                border-radius: 999px;
+                border: 3px solid rgba(148, 163, 184, 0.5);
+                border-top-color: #38bdf8;
+                animation: spin 0.7s linear infinite;
+            }}
+            .loading-text {{
+                font-size: 0.9rem;
+                color: #e5e7eb;
+            }}
+            @keyframes spin {{
+                to {{ transform: rotate(360deg); }}
+            }}
         </style>
+        <script>
+        function showGlobalLoading(label) {{
+            var overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+            var textEl = overlay.querySelector('.loading-text');
+            if (textEl) {{
+                textEl.textContent = label || 'กำลังโหลด...';
+            }}
+            overlay.classList.remove('hidden');
+        }}
+
+        function hideGlobalLoading() {{
+            var overlay = document.getElementById('global-loading');
+            if (!overlay) return;
+            overlay.classList.add('hidden');
+        }}
+
+        window.addEventListener('pageshow', function() {{
+            hideGlobalLoading();
+        }});
+        </script>
     </head>
     <body>
+        <div id="global-loading" class="loading-backdrop hidden">
+            <div class="loading-box">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">กำลังโหลด...</div>
+            </div>
+        </div>
+
         <div class="container">
             <div class="card">
                 <div class="header">
                     <div>
                         <h1>History &amp; Graph</h1>
-                   
-                        
                     </div>
-                    <form method="get" action="/history">
+                    <form method="get" action="/history"
+                          onsubmit="showGlobalLoading('กำลังโหลดประวัติ...');">
                         <input type="hidden" name="line_id" value="{line_id}" />
                         <label style="font-size:0.85rem; margin-right:4px;">Device:</label>
                         <select name="device_id" onchange="this.form.submit()">
@@ -1377,7 +1701,6 @@ def history_page(
                         <input type="hidden" name="page" value="1" />
                     </form>
                 </div>
-              
             </div>
 
             <div class="card">
@@ -1550,16 +1873,6 @@ async def post_history(data: HistoryIn):
         logger.exception("Error when calling get_subscriptions_by_id")
         line_ids = []
 
-    # เตรียมข้อความแจ้งเตือน
-    # msg_lines = [
-    #     f"หน่วย: {unit_name}",
-    #     f"🌡 อุณหภูมิ: {data.temp:.1f} °C  (HIC: {data.hic:.1f} °C)",
-    #     f"💧 ความชื้น: {data.humid:.1f} %RH",
-    #     f"สัญญาณธงสี: {data.flag}",
-    #     f"ฝึก/พัก: {data.flag}",
-    #     f"ดื่มน้ำ: {data.flag}",
-
-    # ]
     flag_map = {
         "white":  {
             "water": "อย่างน้อย 0.5 ลิตร",
@@ -1593,18 +1906,14 @@ async def post_history(data: HistoryIn):
 
     msg_lines = [
         f"หน่วย: {unit_name}",
-        f"🌡อุณหภูมิ: {data.temp:.1f} °C",  
+        f"🌡อุณหภูมิ: {data.temp:.1f} °C",
         f"  รู้สึกเหมือน: {data.hic:.1f} °C",
         f"💧ความชื้น: {data.humid:.1f} %RH",
-        f"-สัญญาณธงสี: {flag_th[data.flag]}",
-        f"-ฝึก/พัก: {flag_map[data.flag]['rest']}",
-        f"-ดื่มน้ำ: {flag_map[data.flag]['water']}",
+        f"-สัญญาณธงสี: {flag_th.get(data.flag, data.flag)}",
+        f"-ฝึก/พัก: {flag_map.get(data.flag, {{}}).get('rest', '-')}",
+        f"-ดื่มน้ำ: {flag_map.get(data.flag, {{}}).get('water', '-')}",
     ]
 
-
-
-    # if data.timestamp:
-    #     msg_lines.append(f"🕒 Time: {data.timestamp}")
     msg_text = "\n".join(msg_lines)
 
     # 4) push LINE ไปทุก line_id (เฉพาะเวลานาที = 00)
@@ -1631,6 +1940,7 @@ async def post_history(data: HistoryIn):
         "google_sheet": gs_result,
         "line_push_results": push_results,
     }
+
 
 @app.get("/status", response_class=HTMLResponse)
 def status_page(line_id: Optional[str] = None):
@@ -1781,14 +2091,14 @@ def status_page(line_id: Optional[str] = None):
         did = str(d.get("id", "-"))
         unit = d.get("unit") or did
         status = (d.get("status") or "").lower()
-        lastupdate = d.get("lastupdate", "-")
+        lastupdate_raw = d.get("lastupdate", "-")
+        lastupdate = format_ts_th(lastupdate_raw) if lastupdate_raw not in (None, "-", "") else "-"
 
         temp = _safe_float(d.get("temp"), default=0.0)
         humid = _safe_float(d.get("humid"), default=0.0)
         hic = _safe_float(d.get("hic"), default=0.0)
         flag = d.get("flag", "")
 
-        # badge สีตาม online/offline
         if status == "online":
             status_text = "ออนไลน์"
             status_class = "status-online"
