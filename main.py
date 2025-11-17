@@ -280,7 +280,7 @@ def build_main_menu_flex(register_url: str, status_url: str, history_url: str) -
             "contents": [
                 {
                     "type": "text",
-                    "text": "จัดการอุปกรณ์เครื่องวัดอุณหภูมิ/ความชื้น",
+                    "text": "เครื่องวัดอุณหภูมิและความชื้นสัมพัทธ์อัตโนมมัติ",
                     "weight": "bold",
                     "size": "lg",
                     "wrap": True
