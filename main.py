@@ -15,7 +15,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 
-TH_TZ = timezone(timedelta(hours=7))
+TH_TZ = timezone(timedelta(hours=0))
 
 def format_ts_th(s: str) -> str:
     """
