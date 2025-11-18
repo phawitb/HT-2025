@@ -1850,10 +1850,10 @@ async def post_history(data: HistoryIn):
 
     # 2.1) เช็คว่าเวลานาที = 00 ไหม ถ้าไม่ใช่จะไม่ส่ง LINE noti
     notify_allowed = True
-    if data.timestamp:
-        dt = _parse_dt(data.timestamp)
-        if dt != datetime.min and dt.minute != 0:
-            notify_allowed = False
+    # if data.timestamp:
+    #     dt = _parse_dt(data.timestamp)
+    #     if dt != datetime.min and dt.minute != 0:
+    #         notify_allowed = False
 
     # 2.2) ดึง unit จาก config (เอาไปใช้ในข้อความ noti)
     unit_name = device_id  # fallback
