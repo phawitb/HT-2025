@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 
 TH_TZ = timezone(timedelta(hours=0))
+ONLINE_WINDOW_SEC = 15 * 60  # 15 นาที
 
 def format_ts_th(s: str) -> str:
     """
@@ -396,10 +397,43 @@ async def callback(request: Request):
     return PlainTextResponse("OK", status_code=200)
 
 
+def calc_status_from_lastupdate(raw_lastupdate) -> str:
+    """
+    คำนวณสถานะ online/offline จาก lastupdate
+    """
+    if raw_lastupdate in (None, "-", ""):
+        return "offline"
+
+    try:
+        if isinstance(raw_lastupdate, (int, float)):
+            dt = datetime.fromtimestamp(float(raw_lastupdate), tz=timezone.utc)
+        else:
+            s = str(raw_lastupdate)
+            if s.endswith("Z"):
+                s = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return "offline"
+
+    if dt == datetime.min:
+        return "offline"
+
+    now_utc = datetime.now(timezone.utc)
+    diff_sec = (now_utc - dt).total_seconds()
+
+    if diff_sec < 0:
+        # ถ้าเวลา future (กรณีรีบูต clock ล้ำไป) ถือว่า online
+        return "online"
+
+    return "online" if diff_sec <= ONLINE_WINDOW_SEC else "offline"
+
+
 def get_current_status_by_line_id(line_id: str):
     """
     GET /exec?action=current_status&line_id=...
-    คืน list device + last reading + status
+    คืน list device + last reading + status (อัปเดตใหม่ตาม lastupdate)
     """
     resp = requests.get(
         BASE_URL,
@@ -407,8 +441,18 @@ def get_current_status_by_line_id(line_id: str):
     )
     resp.raise_for_status()
     data = resp.json()
+
     logger.info(f"current_status({line_id}) -> {data}")
+
+    # อัปเดต status ใหม่
+    if isinstance(data, dict) and data.get("success"):
+        for row in data.get("data", []):
+            raw_lastupdate = row.get("lastupdate")
+            new_status = calc_status_from_lastupdate(raw_lastupdate)
+            row["status"] = new_status  # แทนที่สถานะเดิม
+
     return data
+
 
 
 def get_history_by_line_id(line_id: str):
