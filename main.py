@@ -1873,7 +1873,7 @@ async def post_history(data: HistoryIn):
         logger.exception("Error when calling get_subscriptions_by_id")
         line_ids = []
 
-    flag_map = {
+        flag_map = {
         "white":  {
             "water": "อย่างน้อย 0.5 ลิตร",
             "rest": "50/10 นาที"
@@ -1904,17 +1904,25 @@ async def post_history(data: HistoryIn):
         "black": "⚫⚫⚫"
     }
 
+    # ปรับให้กันพลาด เผื่อ device ส่งมาเป็นตัวใหญ่/รูปแบบอื่น
+    flag_key = (data.flag or "").lower()
+
+    water_txt = flag_map.get(flag_key, {}).get("water", "-")
+    rest_txt = flag_map.get(flag_key, {}).get("rest", "-")
+    flag_txt = flag_th.get(flag_key, data.flag)
+
     msg_lines = [
         f"หน่วย: {unit_name}",
         f"🌡อุณหภูมิ: {data.temp:.1f} °C",
         f"💧ความชื้น: {data.humid:.1f} %RH",
-        f"-สัญญาณธงสี: {flag_th.get(data.flag, data.flag)}",
+        f"-สัญญาณธงสี: {flag_txt}",
         f"-รู้สึกเหมือน: {data.hic:.1f} °C",
-        f"-ฝึก/พัก: {flag_map.get(data.flag, {{}}).get('rest', '-')}",
-        f"-ดื่มน้ำ: {flag_map.get(data.flag, {{}}).get('water', '-')}",
+        f"-ฝึก/พัก: {rest_txt}",
+        f"-ดื่มน้ำ: {water_txt}",
     ]
 
     msg_text = "\n".join(msg_lines)
+
 
     # 4) push LINE ไปทุก line_id (เฉพาะเวลานาที = 00)
     push_results = []
