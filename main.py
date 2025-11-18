@@ -1810,6 +1810,9 @@ def history_page(
 # =========================================================
 # 📡 API: POST /history (sensor → Google Sheet + push LINE)
 # =========================================================
+# =========================================================
+# 📡 API: POST /history (sensor → Google Sheet + push LINE)
+# =========================================================
 
 class HistoryIn(BaseModel):
     id: str          # ตรงนี้คือ device_id (serial เครื่องวัด)
@@ -1850,10 +1853,10 @@ async def post_history(data: HistoryIn):
 
     # 2.1) เช็คว่าเวลานาที = 00 ไหม ถ้าไม่ใช่จะไม่ส่ง LINE noti
     notify_allowed = True
-    # if data.timestamp:
-    #     dt = _parse_dt(data.timestamp)
-    #     if dt != datetime.min and dt.minute != 0:
-    #         notify_allowed = False
+    if data.timestamp:
+        dt = _parse_dt(data.timestamp)
+        if dt != datetime.min and dt.minute != 0:
+            notify_allowed = False
 
     # 2.2) ดึง unit จาก config (เอาไปใช้ในข้อความ noti)
     unit_name = device_id  # fallback
@@ -1873,7 +1876,8 @@ async def post_history(data: HistoryIn):
         logger.exception("Error when calling get_subscriptions_by_id")
         line_ids = []
 
-        flag_map = {
+    # ---------- ตรงนี้คือ mapping ธงสี / น้ำ / พัก ----------
+    flag_map = {
         "white":  {
             "water": "อย่างน้อย 0.5 ลิตร",
             "rest": "50/10 นาที"
@@ -1904,13 +1908,14 @@ async def post_history(data: HistoryIn):
         "black": "⚫⚫⚫"
     }
 
-    # ปรับให้กันพลาด เผื่อ device ส่งมาเป็นตัวใหญ่/รูปแบบอื่น
+    # ปรับให้กันกรณีส่งตัวใหญ่ / แปลก ๆ มา
     flag_key = (data.flag or "").lower()
-
-    water_txt = flag_map.get(flag_key, {}).get("water", "-")
-    rest_txt = flag_map.get(flag_key, {}).get("rest", "-")
+    flag_info = flag_map.get(flag_key, {})
+    water_txt = flag_info.get("water", "-")
+    rest_txt = flag_info.get("rest", "-")
     flag_txt = flag_th.get(flag_key, data.flag)
 
+    # ---------- ประกอบข้อความส่ง LINE ----------
     msg_lines = [
         f"หน่วย: {unit_name}",
         f"🌡อุณหภูมิ: {data.temp:.1f} °C",
@@ -1922,7 +1927,6 @@ async def post_history(data: HistoryIn):
     ]
 
     msg_text = "\n".join(msg_lines)
-
 
     # 4) push LINE ไปทุก line_id (เฉพาะเวลานาที = 00)
     push_results = []
