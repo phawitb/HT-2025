@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, Query
 from fastapi.responses import PlainTextResponse, HTMLResponse
 from linebot import LineBotApi, WebhookParser
 from linebot.exceptions import InvalidSignatureError
@@ -46,7 +46,7 @@ LINE_CHANNEL_SECRET = "23969ac940dc1ae6b5b5211b7c84807a"
 LINE_CHANNEL_ACCESS_TOKEN = "irnHkqFbWyJW5SAVKPbqv9bITkPaZIXWNKlXfg7RKUYwLVNufpWJg7VtdzGEdMFYH25xngW9Nwx2Py/Kp1SVnH3iBkCiZUYgQDJUEBvarWzb/u3CbV1eB7/RGPbi+D9cwRt3pQECw5genf6N4UOn6wdB04t89/1O/w1cDnyilFU="
 
 # 🌐 BASE URL ของเว็บเรา (ใช้สร้างลิงก์ให้ user คลิกจาก LINE)
-# WEB_BASE_URL = "https://9c48c1744596.ngrok-free.app"  # <--- แก้ตรงนี้เวลาเปลี่ยน ngrok
+# WEB_BASE_URL = "https://fb59454d4019.ngrok-free.app"  # <--- แก้ตรงนี้เวลาเปลี่ยน ngrok
 WEB_BASE_URL = "https://ht-2025.onrender.com"
 
 print(f"SECRET length: {len(LINE_CHANNEL_SECRET)}")
@@ -2310,3 +2310,49 @@ def status_page(line_id: Optional[str] = None):
     </html>
     """
     return HTMLResponse(content=html)
+
+# =========================================================
+@app.get("/config")
+def config_api(id: str = Query(..., description="device_id / serial ของเครื่องวัด")):
+    """
+    คืนค่า config ของ device:
+    - unit
+    - adj_temp
+    - adj_humid
+    ใช้สำหรับให้ client (เช่น python script / ESP32) เรียกผ่าน FastAPI อย่างเดียว
+    """
+    try:
+        cfg = get_config_by_id(id)
+    except Exception as e:
+        logger.exception("Error in /config when calling get_config_by_id")
+        return {
+            "success": False,
+            "device_id": id,
+            "error": str(e),
+            "unit": id,
+            "adj_temp": 0.0,
+            "adj_humid": 0.0,
+        }
+
+    if not (isinstance(cfg, dict) and cfg.get("success") and cfg.get("count", 0) > 0):
+        # หาไม่เจอ หรือผิดรูปแบบ → ส่ง default คืนไป
+        return {
+            "success": False,
+            "device_id": id,
+            "unit": id,
+            "adj_temp": 0.0,
+            "adj_humid": 0.0,
+        }
+
+    row = cfg["data"][0]
+    unit = str(row.get("unit") or id)
+    adj_temp = _safe_float(row.get("adj_temp"), 0.0)
+    adj_humid = _safe_float(row.get("adj_humid"), 0.0)
+
+    return {
+        "success": True,
+        "device_id": id,
+        "unit": unit,
+        "adj_temp": adj_temp,
+        "adj_humid": adj_humid,
+    }
