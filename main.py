@@ -322,6 +322,16 @@ def build_main_menu_flex(register_url: str, status_url: str, history_url: str) -
                         "label": "ดูประวัติ & กราฟ",
                         "uri": history_url
                     }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "uri",
+                        "label": "คู่มือการใช้งาน",
+                        "uri": "https://island-holiday-d7f.notion.site/2afdb3a9f6d98064a6a4ce13b71b43db?source=copy_link"
+                    }
                 }
             ]
         }
