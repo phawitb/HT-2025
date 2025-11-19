@@ -464,11 +464,11 @@ def calc_status_from_lastupdate(raw_lastupdate) -> str:
 
     # เทียบใน timezone ไทยตรง ๆ ไปเลย (ง่ายและตรงตามที่ DB เก็บ)
     # now_th = datetime.now(TH_TZ)
-    now_th = datetime.now(ZO_TZ)
-    diff_sec = (now_th - dt.astimezone(TH_TZ)).total_seconds()
+    now_th = datetime.now(TH_TZ)
+    diff_sec = (now_th - dt.astimezone(ZO_TZ)).total_seconds()
 
     print('now_th',now_th)
-    print('dt.astimezone(TH_TZ)',dt.astimezone(TH_TZ))
+    print('dt.astimezone(TH_TZ)',dt.astimezone(ZO_TZ))
     print('diff_sec',diff_sec)
 
     # เผื่อกรณีนาฬิกาอุปกรณ์ล้ำไปในอนาคต ⇒ ถือว่า online
