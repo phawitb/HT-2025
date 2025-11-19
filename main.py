@@ -1081,8 +1081,8 @@ def register_form(
             var select = document.getElementById(selectId);
             if (!select) return;
 
-            var min = -5.0;
-            var max = 5.0;
+            var min = -10.0;
+            var max = 10.0;
             var step = 0.1;
             var def = parseFloat(defaultValue);
 
