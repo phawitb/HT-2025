@@ -777,12 +777,12 @@ def register_form(
 
             <div class="card">
                 <div class="pill">Step 1 / 2</div>
-                <h1>Device ID (serial เครื่องวัด):</h1>
+                <h1>Device ID:</h1>
 
                 <form method="get" action="/register"
                       onsubmit="showGlobalLoading('กำลังตรวจสอบ Device ID...');">
                     <label>
-                        <input type="text" name="device_id" required placeholder="เช่น HTxxx" />
+                        <input type="text" name="device_id" required placeholder="ดูจากบนหน้าจอตอนเปิดเครื่อง" />
                     </label>
                     <input type="hidden" name="line_id" value="{line_id}" />
                     <button type="submit">ถัดไป</button>
@@ -1503,7 +1503,7 @@ def history_page(
             <div class="card">
                 <div class="badge">No Devices</div>
                 <h1>ยังไม่มีอุปกรณ์ที่ผูกกับห้องแชทนี้</h1>
-                <p>กรุณาใช้คำสั่ง <b>/register</b> ในห้อง LINE นี้</p>
+                <p>กรุณาใช้คำสั่ง <b>/ht</b> ในห้อง LINE นี้เลือก "ตั้งค่าอุปกรณ์"</p>
                 <p>เพื่อผูก Device ID กับห้องแชท แล้วจึงกลับมาดูประวัติอีกครั้ง</p>
             </div>
         </body>
@@ -2180,7 +2180,7 @@ def status_page(line_id: Optional[str] = None):
             <div class="card">
                 <div class="badge">No Devices</div>
                 <h1>ยังไม่มีอุปกรณ์ที่ผูกกับห้องแชทนี้</h1>
-                <p>กรุณาใช้คำสั่ง <b>/register</b> ในห้อง LINE นี้</p>
+                <p>กรุณาใช้คำสั่ง <b>/ht</b> ในห้อง LINE นี้เลือก "ตั้งค่าอุปกรณ์"</p>
                 <p>เพื่อผูก Device ID กับห้องแชท แล้วจึงกลับมาดูสถานะอีกครั้ง</p>
             </div>
         </body>
