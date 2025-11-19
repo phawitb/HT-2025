@@ -20,19 +20,22 @@ ONLINE_WINDOW_SEC = 15 * 60  # 15 นาที
 
 def format_ts_th(s: str) -> str:
     """
-    รับ string timestamp จาก GAS เช่น 2025-11-17T22:24:02.000Z
+    รับ string timestamp จาก GAS / DB
+    - ถ้าไม่มี timezone ⇒ ถือว่าเป็นเวลาไทย (+7)
+    - ถ้ามี Z หรือ +xx:xx ⇒ ใช้ timezone นั้น
     คืน string แบบ 11/18/25-05:24 เวลาประเทศไทย
     """
     dt = _parse_dt(s)
     if dt == datetime.min:
-        return s  # ถ้า parse ไม่ได้ก็ส่งคืนเหมือนเดิม
+        return str(s)
 
-    # ถ้าไม่มี timezone ให้ถือว่าเป็น UTC
+    # ถ้าไม่มี timezone ⇒ ตีเป็นเวลาไทย (เพราะ DB +7 มาแล้ว)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=TH_TZ)
 
     dt_th = dt.astimezone(TH_TZ)
     return dt_th.strftime("%m/%d/%y-%H:%M")
+
 
 
 # =========================================================
@@ -427,41 +430,43 @@ async def callback(request: Request):
 def calc_status_from_lastupdate(raw_lastupdate) -> str:
     """
     คำนวณสถานะ online/offline จาก lastupdate
-    รองรับกรณี:
-    - "2025-11-19T10:00:00+07:00"
-    - "2025-11-19 10:00:00"  (ถือว่าเป็นเวลาไทย)
-    - "2025-11-19T03:00:00Z"
+
+    กติกา:
+    - ถ้า lastupdate เป็น string ไม่มี timezone ⇒ ถือว่าเป็น 'เวลาไทย (+7)'
+    - ถ้ามี 'Z' หรือ +xx:xx ⇒ ใช้ timezone นั้น
+    - ถ้าเป็นเลข ⇒ epoch seconds (UTC)
+    แล้วเอามาเทียบกับ 'ตอนนี้ (เวลาไทย)' ใน timezone เดียวกัน
     """
     if raw_lastupdate in (None, "-", ""):
         return "offline"
 
+    # แปลงเป็น datetime ก่อน
     try:
         if isinstance(raw_lastupdate, (int, float)):
-            # timestamp เป็นวินาทีจาก epoch → ถือว่าเป็น UTC
-            dt_utc = datetime.fromtimestamp(float(raw_lastupdate), tz=timezone.utc)
+            # epoch → UTC แล้วค่อยแปลงเป็นไทย
+            dt = datetime.fromtimestamp(float(raw_lastupdate), tz=timezone.utc)
         else:
             s = str(raw_lastupdate)
             if s.endswith("Z"):
                 s = s.replace("Z", "+00:00")
             dt = datetime.fromisoformat(s)
 
-            # ถ้าไม่มี timezone ให้ถือว่าเป็นเวลาไทย (+7)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=TH_TZ)
+        if dt == datetime.min:
+            return "offline"
 
-            # แปลงเป็น UTC สำหรับใช้เทียบ
-            dt_utc = dt.astimezone(timezone.utc)
+        # ถ้าไม่มี timezone ⇒ ถือว่าเป็นเวลาไทย (+7)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TH_TZ)
+
     except Exception:
         return "offline"
 
-    if dt_utc == datetime.min:
-        return "offline"
+    # เทียบใน timezone ไทยตรง ๆ ไปเลย (ง่ายและตรงตามที่ DB เก็บ)
+    now_th = datetime.now(TH_TZ)
+    diff_sec = (now_th - dt.astimezone(TH_TZ)).total_seconds()
 
-    now_utc = datetime.now(timezone.utc)
-    diff_sec = (now_utc - dt_utc).total_seconds()
-
+    # เผื่อกรณีนาฬิกาอุปกรณ์ล้ำไปในอนาคต ⇒ ถือว่า online
     if diff_sec < 0:
-        # ถ้าเวลา future (เช่น clock เพี้ยนล้ำไป) ให้ถือว่า online
         return "online"
 
     return "online" if diff_sec <= ONLINE_WINDOW_SEC else "offline"
