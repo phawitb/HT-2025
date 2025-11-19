@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 
 TH_TZ = timezone(timedelta(hours=7))
+ZO_TZ = timezone(timedelta(hours=0))
 ONLINE_WINDOW_SEC = 15 * 60  # 15 นาที
 
 def format_ts_th(s: str) -> str:
@@ -463,7 +464,7 @@ def calc_status_from_lastupdate(raw_lastupdate) -> str:
 
     # เทียบใน timezone ไทยตรง ๆ ไปเลย (ง่ายและตรงตามที่ DB เก็บ)
     # now_th = datetime.now(TH_TZ)
-    now_th = datetime.now()
+    now_th = datetime.now(ZO_TZ)
     diff_sec = (now_th - dt.astimezone(TH_TZ)).total_seconds()
 
     print('now_th',now_th)
