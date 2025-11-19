@@ -15,7 +15,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 
-TH_TZ = timezone(timedelta(hours=0))
+TH_TZ = timezone(timedelta(hours=7))
 ONLINE_WINDOW_SEC = 15 * 60  # 15 นาที
 
 def format_ts_th(s: str) -> str:
@@ -427,34 +427,45 @@ async def callback(request: Request):
 def calc_status_from_lastupdate(raw_lastupdate) -> str:
     """
     คำนวณสถานะ online/offline จาก lastupdate
+    รองรับกรณี:
+    - "2025-11-19T10:00:00+07:00"
+    - "2025-11-19 10:00:00"  (ถือว่าเป็นเวลาไทย)
+    - "2025-11-19T03:00:00Z"
     """
     if raw_lastupdate in (None, "-", ""):
         return "offline"
 
     try:
         if isinstance(raw_lastupdate, (int, float)):
-            dt = datetime.fromtimestamp(float(raw_lastupdate), tz=timezone.utc)
+            # timestamp เป็นวินาทีจาก epoch → ถือว่าเป็น UTC
+            dt_utc = datetime.fromtimestamp(float(raw_lastupdate), tz=timezone.utc)
         else:
             s = str(raw_lastupdate)
             if s.endswith("Z"):
                 s = s.replace("Z", "+00:00")
             dt = datetime.fromisoformat(s)
+
+            # ถ้าไม่มี timezone ให้ถือว่าเป็นเวลาไทย (+7)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=TH_TZ)
+
+            # แปลงเป็น UTC สำหรับใช้เทียบ
+            dt_utc = dt.astimezone(timezone.utc)
     except Exception:
         return "offline"
 
-    if dt == datetime.min:
+    if dt_utc == datetime.min:
         return "offline"
 
     now_utc = datetime.now(timezone.utc)
-    diff_sec = (now_utc - dt).total_seconds()
+    diff_sec = (now_utc - dt_utc).total_seconds()
 
     if diff_sec < 0:
-        # ถ้าเวลา future (กรณีรีบูต clock ล้ำไป) ถือว่า online
+        # ถ้าเวลา future (เช่น clock เพี้ยนล้ำไป) ให้ถือว่า online
         return "online"
 
     return "online" if diff_sec <= ONLINE_WINDOW_SEC else "offline"
+
 
 
 def get_current_status_by_line_id(line_id: str):
