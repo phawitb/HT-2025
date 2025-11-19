@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 
 TH_TZ = timezone(timedelta(hours=7))
-ONLINE_WINDOW_SEC = 435 * 60  # 15 นาที
+ONLINE_WINDOW_SEC = 15 * 60  # 15 นาที
 
 def format_ts_th(s: str) -> str:
     """
@@ -462,8 +462,13 @@ def calc_status_from_lastupdate(raw_lastupdate) -> str:
         return "offline"
 
     # เทียบใน timezone ไทยตรง ๆ ไปเลย (ง่ายและตรงตามที่ DB เก็บ)
-    now_th = datetime.now(TH_TZ)
+    # now_th = datetime.now(TH_TZ)
+    now_th = datetime.now()
     diff_sec = (now_th - dt.astimezone(TH_TZ)).total_seconds()
+
+    print('now_th',now_th)
+    print('dt.astimezone(TH_TZ)',dt.astimezone(TH_TZ))
+    print('diff_sec',diff_sec)
 
     # เผื่อกรณีนาฬิกาอุปกรณ์ล้ำไปในอนาคต ⇒ ถือว่า online
     if diff_sec < 0:
