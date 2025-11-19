@@ -61,8 +61,8 @@ logger = logging.getLogger("uvicorn.error")
 # =========================================================
 # 🧩 Google Apps Script API (Config + History + Subs)
 # =========================================================
-BASE_URL = "https://script.google.com/macros/s/AKfycbzlvan12-CNKU97jHaKGMdD0vVJoBD13T4GGq6cFhlshAug7oEw3KjG3WSmh3F4-iN4/exec"
-
+# BASE_URL = "https://script.google.com/macros/s/AKfycbzlvan12-CNKU97jHaKGMdD0vVJoBD13T4GGq6cFhlshAug7oEw3KjG3WSmh3F4-iN4/exec"
+BASE_URL = "https://script.google.com/macros/s/AKfycbz3oEFvrweKXHzHpj2XzMkWpuDRlAYH7CEK6YmegVoAHBGTQ7fa_lStOnUEB2BgjsEm/exec"
 
 # ---------- small helper ----------
 def _safe_float(v, default: float = 0.0) -> float:
@@ -156,6 +156,23 @@ def add_subscription(device_id: str, line_id: str):
     """
     payload = {
         "action": "addSubscription",
+        "id": device_id,
+        "line_id": line_id,
+    }
+    resp = requests.post(BASE_URL, json=payload)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def remove_subscription(device_id: str, line_id: str):
+    """
+    POST removeSubscription (ลบ device ออกจากห้อง line_id หนึ่ง ๆ)
+
+    Sheet: subs
+    - ลบทุกแถวที่ (id, line_id) ตรงกัน
+    """
+    payload = {
+        "action": "removeSubscription",
         "id": device_id,
         "line_id": line_id,
     }
@@ -1864,9 +1881,6 @@ def history_page(
 # =========================================================
 # 📡 API: POST /history (sensor → Google Sheet + push LINE)
 # =========================================================
-# =========================================================
-# 📡 API: POST /history (sensor → Google Sheet + push LINE)
-# =========================================================
 
 class HistoryIn(BaseModel):
     id: str          # ตรงนี้คือ device_id (serial เครื่องวัด)
@@ -2014,6 +2028,7 @@ def status_page(line_id: Optional[str] = None):
     แสดงสถานะล่าสุดของทุกอุปกรณ์ที่ผูกกับ line_id นี้
     - ใช้ current_status(line_id) ดึงข้อมูลล่าสุด
     - โชว์การ์ดสวย ๆ แยกตาม device
+    - เพิ่มปุ่ม "ลบออกจากห้องนี้" สำหรับแต่ละ device
     """
     # ถ้าไม่มี line_id → ไม่ให้เปิดตรง ๆ
     if not line_id:
@@ -2207,6 +2222,12 @@ def status_page(line_id: Optional[str] = None):
             <div class="device-footer">
                 <div class="flag-pill">สถานะเซนเซอร์: <b>{flag}</b></div>
                 <div class="lastupdate">อัปเดตล่าสุด: {lastupdate}</div>
+                <form method="post" action="/status/remove"
+                      onsubmit="return confirm('ยืนยันลบอุปกรณ์ {did} ออกจากห้องนี้หรือไม่?');">
+                    <input type="hidden" name="line_id" value="{line_id}" />
+                    <input type="hidden" name="device_id" value="{did}" />
+                    <button type="submit" class="remove-btn">ลบออกจากห้องนี้</button>
+                </form>
             </div>
         </div>
         """
@@ -2345,6 +2366,18 @@ def status_page(line_id: Optional[str] = None):
                 font-size: 0.78rem;
                 color: #6b7280;
             }}
+            .remove-btn {{
+                border: none;
+                border-radius: 999px;
+                padding: 4px 10px;
+                font-size: 0.78rem;
+                background: #fee2e2;
+                color: #b91c1c;
+                cursor: pointer;
+            }}
+            .remove-btn:active {{
+                transform: scale(0.97);
+            }}
         </style>
     </head>
     <body>
@@ -2353,6 +2386,7 @@ def status_page(line_id: Optional[str] = None):
                 <div class="header-title">สถานะอุปกรณ์</div>
                 <div class="header-sub">
                     LINE: <span>{line_id}</span><br />
+                    กดปุ่ม "ลบออกจากห้องนี้" เพื่อลบการเชื่อมอุปกรณ์ออกจากห้องแชทนี้เท่านั้น (ไม่ลบข้อมูลใน history)
                 </div>
             </div>
 
@@ -2364,6 +2398,125 @@ def status_page(line_id: Optional[str] = None):
     </html>
     """
     return HTMLResponse(content=html)
+
+
+# =========================================================
+# ลบ device (ยกเลิก subscribe สำหรับห้อง line_id หนึ่ง ๆ)
+# =========================================================
+
+@app.post("/status/remove", response_class=HTMLResponse)
+async def status_remove(
+    device_id: str = Form(...),
+    line_id: str = Form(...),
+):
+    """
+    ลบความสัมพันธ์ (id, line_id) ออกจากชีต subs ผ่าน GAS: removeSubscription
+    แล้วแสดงผลลัพธ์ + ลิงก์กลับไปหน้า /status
+    """
+    try:
+        res = remove_subscription(device_id=device_id, line_id=line_id)
+        success = bool(res.get("success", False))
+        deleted = res.get("deleted", 0)
+        message = res.get("message", "")
+    except Exception as e:
+        logger.exception("Error in /status/remove")
+        success = False
+        deleted = 0
+        message = str(e)
+
+    status_text = "ลบสำเร็จ" if success and deleted > 0 else "ไม่พบข้อมูลที่จะลบ"
+    badge_color = "#dcfce7" if success and deleted > 0 else "#fee2e2"
+    badge_text_color = "#166534" if success and deleted > 0 else "#b91c1c"
+
+    detail_json = {
+        "device_id": device_id,
+        "line_id": line_id,
+        "success": success,
+        "deleted": deleted,
+        "raw_message": message,
+    }
+    detail_html = f"<pre>{json.dumps(detail_json, ensure_ascii=False, indent=2)}</pre>"
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>ลบอุปกรณ์ออกจากห้องนี้</title>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                background: #f3f4f6;
+                color: #111827;
+                min-height: 100vh;
+                margin: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 16px;
+            }}
+            .card {{
+                background: #ffffff;
+                border-radius: 18px;
+                padding: 22px 18px 24px;
+                box-shadow: 0 10px 25px rgba(15,23,42,0.12);
+                max-width: 460px;
+                width: 100%;
+                border: 1px solid #e5e7eb;
+            }}
+            h1 {{
+                font-size: 1.3rem;
+                margin-bottom: 6px;
+            }}
+            p {{
+                font-size: 0.94rem;
+                line-height: 1.5;
+                margin: 4px 0;
+            }}
+            .badge {{
+                display: inline-block;
+                padding: 3px 9px;
+                border-radius: 999px;
+                background: {badge_color};
+                color: {badge_text_color};
+                font-size: 0.78rem;
+                margin-bottom: 6px;
+            }}
+            pre {{
+                background: #f9fafb;
+                border-radius: 10px;
+                padding: 10px;
+                font-size: 0.76rem;
+                overflow-x: auto;
+                border: 1px solid #e5e7eb;
+                margin-top: 10px;
+            }}
+            a {{
+                display: inline-block;
+                margin-top: 14px;
+                font-size: 0.9rem;
+                color: #0369a1;
+                text-decoration: none;
+            }}
+            a:active {{
+                transform: scale(0.98);
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="badge">{status_text}</div>
+            <h1>Device ID: {device_id}</h1>
+            <p>LINE Chat: <b>{line_id}</b></p>
+            {detail_html}
+            <a href="/status?line_id={line_id}">⬅ กลับไปหน้าแสดงสถานะ</a>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
+
 
 # =========================================================
 @app.get("/config")
